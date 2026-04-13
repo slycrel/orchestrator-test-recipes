@@ -8,8 +8,8 @@ from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import text
 
-from models import Recipe, Review, init_db, get_engine, get_session
-from reviews import router as reviews_router
+from .models import Recipe, Review, init_db, get_engine, get_session
+from .reviews import router as reviews_router
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
@@ -74,12 +74,12 @@ def index(request: Request, q: Optional[str] = None, db: Session = Depends(get_d
     else:
         recipes = db.query(Recipe).all()
     items = [recipe_to_dict(r) for r in recipes]
-    return templates.TemplateResponse("index.html", {"request": request, "recipes": items, "q": q or ""})
+    return templates.TemplateResponse(request, "index.html", {"recipes": items, "q": q or ""})
 
 
 @app.get("/recipes/new", response_class=HTMLResponse)
 def new_recipe_form(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request, "recipe": None, "error": None})
+    return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": None})
 
 
 @app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
@@ -88,8 +88,8 @@ def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(get_db
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return templates.TemplateResponse(
-        "detail.html",
-        {"request": request, "recipe": recipe_to_dict(recipe), "reviews": recipe.reviews}
+        request, "detail.html",
+        {"recipe": recipe_to_dict(recipe), "reviews": recipe.reviews}
     )
 
 
@@ -98,7 +98,7 @@ def edit_recipe_form(recipe_id: int, request: Request, db: Session = Depends(get
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    return templates.TemplateResponse("form.html", {"request": request, "recipe": recipe_to_dict(recipe), "error": None})
+    return templates.TemplateResponse(request, "form.html", {"recipe": recipe_to_dict(recipe), "error": None})
 
 
 # ── form POST handlers ────────────────────────────────────────────────────────
@@ -114,8 +114,8 @@ def create_recipe(
     db: Session = Depends(get_db),
 ):
     if not name.strip():
-        return templates.TemplateResponse("form.html", {
-            "request": request, "recipe": None, "error": "Name is required."
+        return templates.TemplateResponse(request, "form.html", {
+            "recipe": None, "error": "Name is required."
         })
     ingredients_list = [i.strip() for i in ingredients.splitlines() if i.strip()]
     steps_list = [s.strip() for s in steps.splitlines() if s.strip()]
