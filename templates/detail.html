@@ -1,0 +1,90 @@
+{% extends "base.html" %}
+{% block title %}{{ recipe.name }}{% endblock %}
+{% block content %}
+<div style="display:flex;justify-content:space-between;align-items:flex-start;flex-wrap:wrap;gap:1rem;margin-bottom:1.5rem;">
+    <h1 style="font-size:2rem;">{{ recipe.name }}</h1>
+    <div style="display:flex;gap:0.5rem;">
+        <a href="/recipes/{{ recipe.id }}/edit" class="btn btn-secondary">Edit</a>
+        <form method="post" action="/recipes/{{ recipe.id }}/delete" onsubmit="return confirm('Delete this recipe?');" style="display:inline;">
+            <button type="submit" class="btn btn-danger">Delete</button>
+        </form>
+    </div>
+</div>
+
+{% if recipe.photo_url %}
+<img src="{{ recipe.photo_url }}" alt="{{ recipe.name }}" style="max-width:100%;max-height:400px;object-fit:cover;border-radius:6px;margin-bottom:1.5rem;">
+{% endif %}
+
+{% if recipe.tags %}
+<div style="margin-bottom:1.5rem;">
+    {% for tag in recipe.tags.split(',') %}
+    <span style="background:#f0e0d0;color:#8B2500;padding:0.2rem 0.6rem;border-radius:3px;font-size:0.9rem;margin-right:0.3rem;">{{ tag.strip() }}</span>
+    {% endfor %}
+</div>
+{% endif %}
+
+{% if avg_rating %}
+<div class="stars" style="margin-bottom:1.5rem;font-size:1.5rem;">
+    {% for i in range(1,6) %}{% if i <= avg_rating|round %}★{% else %}☆{% endif %}{% endfor %}
+    <span style="color:#666;font-size:1rem;">{{ "%.1f"|format(avg_rating) }} / 5 ({{ review_count }} review{{ 's' if review_count != 1 }})</span>
+</div>
+{% endif %}
+
+<h2 style="margin-bottom:0.75rem;border-bottom:2px solid #e8d5c0;padding-bottom:0.5rem;">Ingredients</h2>
+{% if ingredients %}
+<ul style="margin:0 0 1.5rem 1.5rem;line-height:1.8;">
+    {% for ing in ingredients %}
+    <li>{{ ing }}</li>
+    {% endfor %}
+</ul>
+{% else %}
+<p style="color:#999;margin-bottom:1.5rem;">No ingredients listed.</p>
+{% endif %}
+
+<h2 style="margin-bottom:0.75rem;border-bottom:2px solid #e8d5c0;padding-bottom:0.5rem;">Preparation</h2>
+{% if steps %}
+<ol style="margin:0 0 2rem 1.5rem;line-height:1.9;">
+    {% for step in steps %}
+    <li style="margin-bottom:0.5rem;">{{ step }}</li>
+    {% endfor %}
+</ol>
+{% else %}
+<p style="color:#999;margin-bottom:2rem;">No steps listed.</p>
+{% endif %}
+
+<hr style="margin:2rem 0;border:none;border-top:2px solid #e8d5c0;">
+<h2 style="margin-bottom:1rem;">Reviews ({{ review_count }})</h2>
+
+{% if reviews %}
+{% for rev in reviews %}
+<div style="background:white;border:1px solid #ddd;border-radius:6px;padding:1rem;margin-bottom:1rem;">
+    <div class="stars" style="margin-bottom:0.4rem;">
+        {% for i in range(1,6) %}{% if i <= rev.rating %}★{% else %}☆{% endif %}{% endfor %}
+    </div>
+    {% if rev.review_text %}
+    <p>{{ rev.review_text }}</p>
+    {% endif %}
+</div>
+{% endfor %}
+{% else %}
+<p style="color:#999;margin-bottom:1rem;">No reviews yet — be the first!</p>
+{% endif %}
+
+<h3 style="margin:1.5rem 0 0.75rem;">Leave a Review</h3>
+<form method="post" action="/recipes/{{ recipe.id }}/reviews" style="background:white;border:1px solid #ddd;border-radius:6px;padding:1.25rem;max-width:500px;">
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Rating</label>
+        <select name="rating" required style="padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;">
+            <option value="">-- select --</option>
+            {% for i in range(1,6) %}
+            <option value="{{ i }}">{{ i }} star{{ 's' if i > 1 }}</option>
+            {% endfor %}
+        </select>
+    </div>
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Review (optional)</label>
+        <textarea name="review_text" rows="3" style="width:100%;padding:0.4rem;border:1px solid #ccc;border-radius:4px;font-size:0.95rem;resize:vertical;"></textarea>
+    </div>
+    <button type="submit" class="btn btn-primary">Submit Review</button>
+</form>
+{% endblock %}

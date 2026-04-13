@@ -1,0 +1,29 @@
+{% extends "base.html" %}
+{% block title %}{% if recipe %}Edit {{ recipe.name }}{% else %}New Recipe{% endif %}{% endblock %}
+{% block content %}
+<div class="card">
+  <h2>{% if recipe %}Edit Recipe{% else %}New Recipe{% endif %}</h2>
+  {% if error %}<p class="error">{{ error }}</p>{% endif %}
+  <form action="{% if recipe %}/recipes/{{ recipe.id }}/edit{% else %}/recipes{% endif %}" method="post">
+    <label>Name *
+      <input type="text" name="name" value="{{ recipe.name if recipe else '' }}" required>
+    </label>
+    <label>Ingredients (one per line) *
+      <textarea name="ingredients" rows="6" required>{{ recipe.ingredients|join('\n') if recipe else '' }}</textarea>
+    </label>
+    <label>Preparation Steps (one per line) *
+      <textarea name="steps" rows="6" required>{{ recipe.steps|join('\n') if recipe else '' }}</textarea>
+    </label>
+    <label>Photo URL
+      <input type="url" name="photo_url" value="{{ recipe.photo_url if recipe else '' }}" placeholder="https://…">
+    </label>
+    <label>Tags (comma-separated)
+      <input type="text" name="tags" value="{{ recipe.tags|join(', ') if recipe else '' }}" placeholder="dinner, vegetarian, quick">
+    </label>
+    <div class="actions" style="margin-top:1rem">
+      <button type="submit" class="btn">{% if recipe %}Save Changes{% else %}Create Recipe{% endif %}</button>
+      <a href="{% if recipe %}/recipes/{{ recipe.id }}{% else %}/{% endif %}" class="btn btn-secondary">Cancel</a>
+    </div>
+  </form>
+</div>
+{% endblock %}

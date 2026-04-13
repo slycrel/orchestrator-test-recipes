@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Recipe Site{% endblock %}</title>
+    <style>
+        * { box-sizing: border-box; margin: 0; padding: 0; }
+        body { font-family: Georgia, serif; background: #f9f6f1; color: #333; }
+        header { background: #8B2500; color: white; padding: 1rem 2rem; }
+        header a { color: white; text-decoration: none; font-size: 1.5rem; font-weight: bold; }
+        nav { background: #a63000; padding: 0.5rem 2rem; }
+        nav a { color: #ffd; text-decoration: none; margin-right: 1rem; }
+        nav a:hover { text-decoration: underline; }
+        main { max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+        .btn { display: inline-block; padding: 0.4rem 1rem; border: none; border-radius: 4px; cursor: pointer; font-size: 0.95rem; text-decoration: none; }
+        .btn-primary { background: #8B2500; color: white; }
+        .btn-primary:hover { background: #a63000; }
+        .btn-danger { background: #c00; color: white; }
+        .btn-danger:hover { background: #e00; }
+        .btn-secondary { background: #666; color: white; }
+        .btn-secondary:hover { background: #555; }
+        .flash { padding: 0.75rem 1rem; margin-bottom: 1rem; border-radius: 4px; background: #d4edda; color: #155724; border: 1px solid #c3e6cb; }
+        .stars { color: #f5a623; font-size: 1.2rem; }
+        footer { text-align: center; padding: 2rem; color: #999; font-size: 0.85rem; margin-top: 3rem; }
+    </style>
+</head>
+<body>
+<header>
+    <a href="/">Poe Recipes</a>
+</header>
+<nav>
+    <a href="/">Home</a>
+    <a href="/recipes/new">+ New Recipe</a>
+</nav>
+<main>
+    {% block content %}{% endblock %}
+</main>
+<footer>Poe Recipe Site</footer>
+</body>
+</html>

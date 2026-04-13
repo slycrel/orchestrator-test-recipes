@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}{{ "Edit" if recipe else "New" }} Recipe{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:1.5rem;">{{ "Edit" if recipe else "New" }} Recipe</h1>
+
+<form method="post" action="{{ '/recipes/' + recipe.id|string + '/edit' if recipe else '/recipes' }}"
+      style="background:white;border:1px solid #ddd;border-radius:6px;padding:1.5rem;max-width:650px;">
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Name *</label>
+        <input type="text" name="name" value="{{ recipe.name if recipe else '' }}" required
+               style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;">
+    </div>
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Ingredients (one per line)</label>
+        <textarea name="ingredients" rows="6"
+                  style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.95rem;resize:vertical;">{{ ingredients_text if ingredients_text else '' }}</textarea>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Preparation Steps (one per line)</label>
+        <textarea name="steps" rows="6"
+                  style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:0.95rem;resize:vertical;">{{ steps_text if steps_text else '' }}</textarea>
+    </div>
+
+    <div style="margin-bottom:1rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Photo URL</label>
+        <input type="url" name="photo_url" value="{{ recipe.photo_url if recipe and recipe.photo_url else '' }}"
+               style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;"
+               placeholder="https://...">
+    </div>
+
+    <div style="margin-bottom:1.5rem;">
+        <label style="display:block;margin-bottom:0.4rem;font-weight:bold;">Tags (comma-separated)</label>
+        <input type="text" name="tags" value="{{ recipe.tags if recipe and recipe.tags else '' }}"
+               style="width:100%;padding:0.5rem;border:1px solid #ccc;border-radius:4px;font-size:1rem;"
+               placeholder="e.g. vegetarian, quick, Italian">
+    </div>
+
+    <div style="display:flex;gap:0.75rem;">
+        <button type="submit" class="btn btn-primary">{{ "Save Changes" if recipe else "Create Recipe" }}</button>
+        <a href="{{ '/recipes/' + recipe.id|string if recipe else '/' }}" class="btn btn-secondary">Cancel</a>
+    </div>
+</form>
+{% endblock %}

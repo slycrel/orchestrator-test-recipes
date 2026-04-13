@@ -1,0 +1,48 @@
+{% extends "base.html" %}
+{% block title %}Recipes{% endblock %}
+{% block content %}
+<h1 style="margin-bottom:1rem;">Recipes</h1>
+
+<form method="get" action="/" style="display:flex;gap:0.5rem;margin-bottom:1.5rem;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search by name, ingredient, or tag..."
+           style="flex:1;padding:0.5rem;font-size:1rem;border:1px solid #ccc;border-radius:4px;">
+    <button type="submit" class="btn btn-primary">Search</button>
+    {% if q %}<a href="/" class="btn btn-secondary">Clear</a>{% endif %}
+</form>
+
+{% if q %}
+<p style="margin-bottom:1rem;color:#666;">Results for "<strong>{{ q }}</strong>" — {{ recipes|length }} found</p>
+{% endif %}
+
+{% if recipes %}
+<div style="display:grid;grid-template-columns:repeat(auto-fill,minmax(260px,1fr));gap:1.25rem;">
+{% for r in recipes %}
+<div style="background:white;border:1px solid #ddd;border-radius:6px;overflow:hidden;">
+    {% if r.photo_url %}
+    <img src="{{ r.photo_url }}" alt="{{ r.name }}" style="width:100%;height:160px;object-fit:cover;">
+    {% else %}
+    <div style="width:100%;height:80px;background:#e8d5c0;display:flex;align-items:center;justify-content:center;color:#999;">No photo</div>
+    {% endif %}
+    <div style="padding:1rem;">
+        <h2 style="font-size:1.1rem;margin-bottom:0.25rem;"><a href="/recipes/{{ r.id }}" style="color:#8B2500;text-decoration:none;">{{ r.name }}</a></h2>
+        {% if r.tags %}
+        <div style="margin-bottom:0.5rem;">
+            {% for tag in r.tags.split(',') %}
+            <span style="background:#f0e0d0;color:#8B2500;padding:0.15rem 0.5rem;border-radius:3px;font-size:0.8rem;margin-right:0.25rem;">{{ tag.strip() }}</span>
+            {% endfor %}
+        </div>
+        {% endif %}
+        {% if r.avg_rating %}
+        <div class="stars">
+            {% for i in range(1,6) %}{% if i <= r.avg_rating|round %}★{% else %}☆{% endif %}{% endfor %}
+            <span style="color:#666;font-size:0.85rem;">({{ r.review_count }})</span>
+        </div>
+        {% endif %}
+    </div>
+</div>
+{% endfor %}
+</div>
+{% else %}
+<p style="color:#666;">No recipes yet. <a href="/recipes/new" style="color:#8B2500;">Add the first one!</a></p>
+{% endif %}
+{% endblock %}

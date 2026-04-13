@@ -1,0 +1,15 @@
+version: "3.9"
+
+services:
+  web:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      - sqlite_data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/recipes.db
+    restart: unless-stopped
+
+volumes:
+  sqlite_data:
