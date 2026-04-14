@@ -51,6 +51,25 @@ class TestRecipeCRUD:
         assert data["review_count"] == 0
         assert "id" in data
 
+    def test_photo_url_round_trip(self, client):
+        """photo_url set via POST is returned in GET response."""
+        url = "https://example.com/soup.jpg"
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": ["water"], "steps": ["boil"], "photo_url": url})
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+        r2 = client.get(f"/api/recipes/{recipe_id}")
+        assert r2.status_code == 200
+        assert r2.json()["photo_url"] == url
+
+    def test_photo_url_null_when_not_set(self, client):
+        """photo_url is null in GET when not provided at create time."""
+        r = client.post("/api/recipes", json={"name": "Plain", "ingredients": [], "steps": []})
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+        r2 = client.get(f"/api/recipes/{recipe_id}")
+        assert r2.status_code == 200
+        assert r2.json()["photo_url"] is None
+
     def test_get_recipe_via_api(self, client, db):
         """Retrieve a recipe by ID."""
         recipe = Recipe(
@@ -353,6 +372,50 @@ class TestReviewSystem:
         payload = {"rating": 5, "text": "Good"}
         response = client.post("/api/recipes/999/reviews", json=payload)
         assert response.status_code == 404
+
+    def test_delete_review(self, client, db):
+        """DELETE /api/recipes/{id}/reviews/{rid} removes the review."""
+        recipe = Recipe(name="Stew", ingredients=json.dumps([]), steps=json.dumps([]))
+        db.add(recipe)
+        db.commit()
+        db.refresh(recipe)
+
+        r = client.post(f"/api/recipes/{recipe.id}/reviews", json={"rating": 4, "text": "Nice"})
+        assert r.status_code == 201
+        review_id = r.json()["id"]
+
+        resp = client.delete(f"/api/recipes/{recipe.id}/reviews/{review_id}")
+        assert resp.status_code == 204
+
+        # Verify review is gone from aggregate
+        r2 = client.get(f"/api/recipes/{recipe.id}/reviews")
+        assert r2.json()["review_count"] == 0
+
+    def test_delete_review_not_found(self, client, db):
+        """DELETE non-existent review returns 404."""
+        recipe = Recipe(name="Stew2", ingredients=json.dumps([]), steps=json.dumps([]))
+        db.add(recipe)
+        db.commit()
+        db.refresh(recipe)
+
+        resp = client.delete(f"/api/recipes/{recipe.id}/reviews/9999")
+        assert resp.status_code == 404
+
+    def test_delete_review_wrong_recipe(self, client, db):
+        """DELETE review that belongs to a different recipe returns 404."""
+        r1 = Recipe(name="RecipeA", ingredients=json.dumps([]), steps=json.dumps([]))
+        r2 = Recipe(name="RecipeB", ingredients=json.dumps([]), steps=json.dumps([]))
+        db.add_all([r1, r2])
+        db.commit()
+        db.refresh(r1)
+        db.refresh(r2)
+
+        rv = client.post(f"/api/recipes/{r1.id}/reviews", json={"rating": 3})
+        review_id = rv.json()["id"]
+
+        # Try to delete r1's review via r2's URL
+        resp = client.delete(f"/api/recipes/{r2.id}/reviews/{review_id}")
+        assert resp.status_code == 404
 
 
 class TestHTMLRoutes:

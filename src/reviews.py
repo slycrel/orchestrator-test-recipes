@@ -74,6 +74,19 @@ def api_aggregate_rating(recipe_id: int, db: Session = Depends(get_db)):
     }
 
 
+# ── DELETE review ─────────────────────────────────────────────────────────────
+
+@router.delete("/api/recipes/{recipe_id}/reviews/{review_id}", status_code=204)
+def api_delete_review(recipe_id: int, review_id: int, db: Session = Depends(get_db)):
+    review = db.query(Review).filter(
+        Review.id == review_id, Review.recipe_id == recipe_id
+    ).first()
+    if not review:
+        raise HTTPException(status_code=404, detail="Review not found")
+    db.delete(review)
+    db.commit()
+
+
 # ── HTML form POST ────────────────────────────────────────────────────────────
 
 @router.post("/recipes/{recipe_id}/reviews")

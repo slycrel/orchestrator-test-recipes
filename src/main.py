@@ -134,7 +134,7 @@ def recipe_to_dict(recipe: Recipe, db: Optional[Session] = None) -> dict:
         "name": recipe.name,
         "ingredients": _safe_json_load(recipe.ingredients, [], recipe.id, "ingredients") if recipe.ingredients else [],
         "steps": _safe_json_load(recipe.steps, [], recipe.id, "steps") if recipe.steps else [],
-        "photo_url": recipe.photo_url or "",
+        "photo_url": recipe.photo_url or None,
         "tags": [t.strip() for t in (recipe.tags or "").split(",") if t.strip()],
         "avg_rating": avg_rating,
         "review_count": review_count,
@@ -215,8 +215,14 @@ def create_recipe(
         tags=tags.strip() or None,
     )
     db.add(recipe)
-    db.commit()
-    db.refresh(recipe)
+    try:
+        db.commit()
+        db.refresh(recipe)
+    except SQLAlchemyError:
+        db.rollback()
+        return templates.TemplateResponse("form.html", {
+            "request": request, "recipe": None, "error": "Could not save recipe. Please try again."
+        })
     return RedirectResponse(url=f"/recipes/{recipe.id}", status_code=303)
 
 
@@ -243,7 +249,13 @@ def update_recipe(
     recipe.steps = json.dumps([s.strip() for s in steps.splitlines() if s.strip()])
     recipe.photo_url = photo_url.strip() or None
     recipe.tags = tags.strip() or None
-    db.commit()
+    try:
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        return templates.TemplateResponse("form.html", {
+            "request": request, "recipe": recipe, "error": "Could not save changes. Please try again."
+        })
     return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=303)
 
 
