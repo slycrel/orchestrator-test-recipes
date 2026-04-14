@@ -84,3 +84,30 @@ def get_session(engine=None):
     if engine is None:
         engine = get_engine()
     return Session(engine)
+
+
+# Single shared engine + get_db dependency. Both main.py and reviews.py
+# import get_db from here so FastAPI only manages one connection pool.
+_engine = None
+
+
+def _get_shared_engine():
+    global _engine
+    if _engine is None:
+        _engine = init_db()
+    return _engine
+
+
+def _reset_shared_engine() -> None:
+    # Test hook: drop the cached engine so a fresh DATABASE_URL takes effect.
+    global _engine
+    _engine = None
+
+
+def get_db():
+    engine = _get_shared_engine()
+    db = get_session(engine)
+    try:
+        yield db
+    finally:
+        db.close()

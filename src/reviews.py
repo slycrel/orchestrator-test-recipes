@@ -5,22 +5,9 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from models import Recipe, Review, get_session, init_db
+from models import Recipe, Review, get_db
 
 router = APIRouter()
-
-_engine = None
-
-
-def get_db():
-    global _engine
-    if _engine is None:
-        _engine = init_db()
-    db = get_session(_engine)
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 def _review_dict(r: Review) -> dict:

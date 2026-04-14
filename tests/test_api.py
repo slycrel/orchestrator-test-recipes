@@ -502,5 +502,52 @@ class TestSearchIntegration:
         assert len(data) == 1
 
 
+class TestSharedDbDependency:
+    """Regression tests for issue #6: get_db/_engine must be defined once."""
+
+    def test_get_db_is_shared_across_modules(self):
+        """main.py and reviews.py must expose the same get_db callable.
+
+        FastAPI keys dependency_overrides by the callable identity. If each module
+        defines its own get_db, an override in one won't affect routes in the other,
+        and each module creates its own engine → two connection pools. The shared
+        callable must come from models.py.
+        """
+        from src import main as main_mod
+        from src import reviews as reviews_mod
+
+        # Both routers must resolve Depends(get_db) to the exact same callable.
+        assert main_mod.get_db is reviews_mod.get_db
+        # And that callable must be the one defined in models.py.
+        assert main_mod.get_db.__module__ == "models"
+        assert main_mod.get_db.__qualname__ == "get_db"
+
+    def test_only_one_engine_instance(self, client, db):
+        """After hitting both a main route and a reviews route, only one shared
+        engine object should exist in models._engine."""
+        from src import models as models_mod
+        from src import main as main_mod
+        from src import reviews as reviews_mod
+
+        # Neither main nor reviews should carry its own _engine module global.
+        assert not hasattr(main_mod, "_engine"), "main.py should not own an _engine"
+        assert not hasattr(reviews_mod, "_engine"), "reviews.py should not own an _engine"
+
+        # Create a recipe (main route) and a review (reviews route) in one client.
+        r = client.post("/api/recipes", json={
+            "name": "Shared Engine Test",
+            "ingredients": ["a"],
+            "steps": ["b"],
+        })
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+
+        r = client.post(f"/api/recipes/{recipe_id}/reviews", json={"rating": 5, "text": "ok"})
+        assert r.status_code == 201
+
+        # Check the single shared engine attribute exists on models.
+        assert hasattr(models_mod, "_engine")
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

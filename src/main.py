@@ -3,38 +3,76 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse
+from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from slowapi import Limiter
+from slowapi.errors import RateLimitExceeded
 
-from models import Recipe, Review, init_db, get_engine, get_session
+from models import Recipe, Review, init_db, get_engine, get_session, get_db, _get_shared_engine
 from reviews import router as reviews_router
+
+# Abuse limits for POST /recipes.
+MAX_RECIPE_BODY_BYTES = 32768
+RECIPE_CREATE_RATE = "10/minute"
+
+
+def _client_ip(request: Request) -> str:
+    # Prefer X-Forwarded-For (enables per-IP tests and real deployments behind proxies);
+    # fall back to the direct peer.
+    xff = request.headers.get("x-forwarded-for")
+    if xff:
+        return xff.split(",")[0].strip()
+    return request.client.host if request.client else "unknown"
+
+
+limiter = Limiter(key_func=_client_ip)
 
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
 app = FastAPI(title="Recipe Site")
+app.state.limiter = limiter
+
+
+def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> PlainTextResponse:
+    return PlainTextResponse("Too Many Requests", status_code=429)
+
+
+app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+
+
+@app.middleware("http")
+async def _recipe_body_size_guard(request: Request, call_next):
+    # Reject oversized POST /recipes payloads before FastAPI parses form data.
+    if request.method == "POST" and request.url.path == "/recipes":
+        cl = request.headers.get("content-length")
+        if cl is not None:
+            try:
+                if int(cl) > MAX_RECIPE_BODY_BYTES:
+                    return PlainTextResponse("Payload Too Large", status_code=413)
+            except ValueError:
+                pass
+        else:
+            # No Content-Length: buffer body to measure, then replay via receive.
+            body = await request.body()
+            if len(body) > MAX_RECIPE_BODY_BYTES:
+                return PlainTextResponse("Payload Too Large", status_code=413)
+
+            async def _replay_receive():
+                return {"type": "http.request", "body": body, "more_body": False}
+
+            request._receive = _replay_receive
+    return await call_next(request)
+
+
 app.include_router(reviews_router)
-
-_engine = None
-
-
-def get_db():
-    global _engine
-    if _engine is None:
-        _engine = init_db()
-    db = get_session(_engine)
-    try:
-        yield db
-    finally:
-        db.close()
 
 
 @app.on_event("startup")
 def startup():
-    global _engine
-    _engine = init_db()
+    _get_shared_engine()
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -104,6 +142,7 @@ def edit_recipe_form(recipe_id: int, request: Request, db: Session = Depends(get
 # ── form POST handlers ────────────────────────────────────────────────────────
 
 @app.post("/recipes", response_class=HTMLResponse)
+@limiter.limit(RECIPE_CREATE_RATE)
 def create_recipe(
     request: Request,
     name: str = Form(...),
