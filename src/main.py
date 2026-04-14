@@ -46,7 +46,7 @@ app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 @app.middleware("http")
 async def _recipe_body_size_guard(request: Request, call_next):
     # Reject oversized POST /recipes payloads before FastAPI parses form data.
-    if request.method == "POST" and request.url.path == "/recipes":
+    if request.method == "POST" and request.url.path in ("/recipes", "/api/recipes"):
         cl = request.headers.get("content-length")
         if cl is not None:
             try:
@@ -252,7 +252,8 @@ def api_get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/recipes", status_code=201)
-def api_create_recipe(payload: RecipeCreate, db: Session = Depends(get_db)):
+@limiter.limit(RECIPE_CREATE_RATE)
+def api_create_recipe(request: Request, payload: RecipeCreate, db: Session = Depends(get_db)):
     recipe = Recipe(
         name=payload.name,
         ingredients=json.dumps(payload.ingredients),
