@@ -1,5 +1,6 @@
 import json
 import os
+from contextlib import asynccontextmanager
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
@@ -34,7 +35,13 @@ limiter = Limiter(key_func=_client_ip)
 BASE_DIR = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 templates = Jinja2Templates(directory=os.path.join(BASE_DIR, "templates"))
 
-app = FastAPI(title="Recipe Site")
+@asynccontextmanager
+async def _lifespan(app: FastAPI):
+    _get_shared_engine()
+    yield
+
+
+app = FastAPI(title="Recipe Site", lifespan=_lifespan)
 app.state.limiter = limiter
 
 
@@ -90,11 +97,6 @@ async def _recipe_body_size_guard(request: Request, call_next):
 
 
 app.include_router(reviews_router)
-
-
-@app.on_event("startup")
-def startup():
-    _get_shared_engine()
 
 
 # ── helpers ──────────────────────────────────────────────────────────────────
@@ -171,8 +173,7 @@ def index(
     recipes = base_q.offset(off).limit(lim).all()
     total_pages = max(1, (total + lim - 1) // lim)
     items = [recipe_to_dict(r, db) for r in recipes]
-    return templates.TemplateResponse("index.html", {
-        "request": request,
+    return templates.TemplateResponse(request, "index.html", {
         "recipes": items,
         "q": q or "",
         "page": page,
@@ -183,7 +184,7 @@ def index(
 
 @app.get("/recipes/new", response_class=HTMLResponse)
 def new_recipe_form(request: Request):
-    return templates.TemplateResponse("form.html", {"request": request, "recipe": None, "error": None})
+    return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": None})
 
 
 @app.get("/recipes/{recipe_id}", response_class=HTMLResponse)
@@ -192,8 +193,8 @@ def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(get_db
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     return templates.TemplateResponse(
-        "detail.html",
-        {"request": request, "recipe": recipe_to_dict(recipe, db), "reviews": recipe.reviews}
+        request, "detail.html",
+        {"recipe": recipe_to_dict(recipe, db), "reviews": recipe.reviews}
     )
 
 
@@ -202,7 +203,7 @@ def edit_recipe_form(recipe_id: int, request: Request, db: Session = Depends(get
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    return templates.TemplateResponse("form.html", {"request": request, "recipe": recipe_to_dict(recipe, db), "error": None})
+    return templates.TemplateResponse(request, "form.html", {"recipe": recipe_to_dict(recipe, db), "error": None})
 
 
 # ── form POST handlers ────────────────────────────────────────────────────────
@@ -219,9 +220,7 @@ def create_recipe(
     db: Session = Depends(get_db),
 ):
     if not name.strip():
-        return templates.TemplateResponse("form.html", {
-            "request": request, "recipe": None, "error": "Name is required."
-        })
+        return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": "Name is required."})
     ingredients_list = [i.strip() for i in ingredients.splitlines() if i.strip()]
     steps_list = [s.strip() for s in steps.splitlines() if s.strip()]
     recipe = Recipe(
@@ -237,9 +236,7 @@ def create_recipe(
         db.refresh(recipe)
     except SQLAlchemyError:
         db.rollback()
-        return templates.TemplateResponse("form.html", {
-            "request": request, "recipe": None, "error": "Could not save recipe. Please try again."
-        })
+        return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": "Could not save recipe. Please try again."})
     return RedirectResponse(url=f"/recipes/{recipe.id}", status_code=303)
 
 
@@ -258,9 +255,7 @@ def update_recipe(
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
     if not name.strip():
-        return templates.TemplateResponse("form.html", {
-            "request": request, "recipe": recipe, "error": "Name is required."
-        })
+        return templates.TemplateResponse(request, "form.html", {"recipe": recipe, "error": "Name is required."})
     recipe.name = name.strip()
     recipe.ingredients = json.dumps([i.strip() for i in ingredients.splitlines() if i.strip()])
     recipe.steps = json.dumps([s.strip() for s in steps.splitlines() if s.strip()])
@@ -270,9 +265,7 @@ def update_recipe(
         db.commit()
     except SQLAlchemyError:
         db.rollback()
-        return templates.TemplateResponse("form.html", {
-            "request": request, "recipe": recipe, "error": "Could not save changes. Please try again."
-        })
+        return templates.TemplateResponse(request, "form.html", {"recipe": recipe, "error": "Could not save changes. Please try again."})
     return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=303)
 
 
