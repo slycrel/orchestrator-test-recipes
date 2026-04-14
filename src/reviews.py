@@ -4,6 +4,7 @@ from typing import Optional
 from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
+from sqlalchemy import func
 
 from models import Recipe, Review, ReviewCreate, get_db
 
@@ -14,10 +15,14 @@ def _review_dict(r: Review) -> dict:
     return {"id": r.id, "recipe_id": r.recipe_id, "rating": r.rating, "text": r.text or ""}
 
 
-def _aggregate(reviews) -> Optional[float]:
-    if not reviews:
-        return None
-    return round(sum(r.rating for r in reviews) / len(reviews), 1)
+def _sql_aggregate(db: Session, recipe_id: int):
+    """Return (avg_rating, review_count) via SQL — no lazy loading."""
+    row = db.query(func.avg(Review.rating), func.count(Review.id)).filter(
+        Review.recipe_id == recipe_id
+    ).one()
+    avg_raw, count = row
+    avg_rating = round(float(avg_raw), 1) if avg_raw is not None else None
+    return avg_rating, count
 
 
 # ── JSON API ──────────────────────────────────────────────────────────────────
@@ -27,11 +32,13 @@ def api_list_reviews(recipe_id: int, db: Session = Depends(get_db)):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+    avg_rating, review_count = _sql_aggregate(db, recipe_id)
+    reviews = db.query(Review).filter(Review.recipe_id == recipe_id).all()
     return {
         "recipe_id": recipe_id,
-        "avg_rating": _aggregate(recipe.reviews),
-        "review_count": len(recipe.reviews),
-        "reviews": [_review_dict(r) for r in recipe.reviews],
+        "avg_rating": avg_rating,
+        "review_count": review_count,
+        "reviews": [_review_dict(r) for r in reviews],
     }
 
 
@@ -55,10 +62,11 @@ def api_aggregate_rating(recipe_id: int, db: Session = Depends(get_db)):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+    avg_rating, review_count = _sql_aggregate(db, recipe_id)
     return {
         "recipe_id": recipe_id,
-        "avg_rating": _aggregate(recipe.reviews),
-        "review_count": len(recipe.reviews),
+        "avg_rating": avg_rating,
+        "review_count": review_count,
     }
 
 

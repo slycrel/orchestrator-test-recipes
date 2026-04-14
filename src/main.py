@@ -6,7 +6,7 @@ from fastapi import FastAPI, Request, Form, HTTPException, Depends
 from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.orm import Session
-from sqlalchemy import text
+from sqlalchemy import text, func
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
@@ -77,7 +77,23 @@ def startup():
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
-def recipe_to_dict(recipe: Recipe) -> dict:
+def recipe_to_dict(recipe: Recipe, db: Optional[Session] = None) -> dict:
+    # Use SQL aggregates when a session is available to avoid N+1 lazy loading.
+    if db is not None:
+        from models import Review as _Review
+        row = db.query(
+            func.avg(_Review.rating), func.count(_Review.id)
+        ).filter(_Review.recipe_id == recipe.id).one()
+        avg_raw, review_count = row
+        avg_rating = round(float(avg_raw), 1) if avg_raw is not None else None
+    else:
+        # Fallback: use already-loaded relationship (single-recipe detail calls).
+        reviews = recipe.reviews
+        avg_rating = (
+            round(sum(r.rating for r in reviews) / len(reviews), 1)
+            if reviews else None
+        )
+        review_count = len(reviews)
     return {
         "id": recipe.id,
         "name": recipe.name,
@@ -85,11 +101,8 @@ def recipe_to_dict(recipe: Recipe) -> dict:
         "steps": json.loads(recipe.steps) if recipe.steps else [],
         "photo_url": recipe.photo_url or "",
         "tags": [t.strip() for t in (recipe.tags or "").split(",") if t.strip()],
-        "avg_rating": (
-            round(sum(r.rating for r in recipe.reviews) / len(recipe.reviews), 1)
-            if recipe.reviews else None
-        ),
-        "review_count": len(recipe.reviews),
+        "avg_rating": avg_rating,
+        "review_count": review_count,
     }
 
 
@@ -111,7 +124,7 @@ def index(request: Request, q: Optional[str] = None, db: Session = Depends(get_d
         recipes = db.query(Recipe).filter(Recipe.id.in_(ids)).all() if ids else []
     else:
         recipes = db.query(Recipe).all()
-    items = [recipe_to_dict(r) for r in recipes]
+    items = [recipe_to_dict(r, db) for r in recipes]
     return templates.TemplateResponse("index.html", {"request": request, "recipes": items, "q": q or ""})
 
 
@@ -127,7 +140,7 @@ def recipe_detail(recipe_id: int, request: Request, db: Session = Depends(get_db
         raise HTTPException(status_code=404, detail="Recipe not found")
     return templates.TemplateResponse(
         "detail.html",
-        {"request": request, "recipe": recipe_to_dict(recipe), "reviews": recipe.reviews}
+        {"request": request, "recipe": recipe_to_dict(recipe, db), "reviews": recipe.reviews}
     )
 
 
@@ -136,7 +149,7 @@ def edit_recipe_form(recipe_id: int, request: Request, db: Session = Depends(get
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    return templates.TemplateResponse("form.html", {"request": request, "recipe": recipe_to_dict(recipe), "error": None})
+    return templates.TemplateResponse("form.html", {"request": request, "recipe": recipe_to_dict(recipe, db), "error": None})
 
 
 # ── form POST handlers ────────────────────────────────────────────────────────
@@ -213,7 +226,7 @@ def api_list_recipes(q: Optional[str] = None, db: Session = Depends(get_db)):
         recipes = db.query(Recipe).filter(Recipe.id.in_(ids)).all() if ids else []
     else:
         recipes = db.query(Recipe).all()
-    return [recipe_to_dict(r) for r in recipes]
+    return [recipe_to_dict(r, db) for r in recipes]
 
 
 @app.get("/api/recipes/{recipe_id}")
@@ -221,7 +234,7 @@ def api_get_recipe(recipe_id: int, db: Session = Depends(get_db)):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    return recipe_to_dict(recipe)
+    return recipe_to_dict(recipe, db)
 
 
 @app.post("/api/recipes", status_code=201)
@@ -236,7 +249,7 @@ def api_create_recipe(payload: RecipeCreate, db: Session = Depends(get_db)):
     db.add(recipe)
     db.commit()
     db.refresh(recipe)
-    return recipe_to_dict(recipe)
+    return recipe_to_dict(recipe, db)
 
 
 @app.put("/api/recipes/{recipe_id}")
@@ -255,7 +268,7 @@ def api_update_recipe(recipe_id: int, payload: RecipeUpdate, db: Session = Depen
     if payload.tags is not None:
         recipe.tags = ",".join(payload.tags) if payload.tags else None
     db.commit()
-    return recipe_to_dict(recipe)
+    return recipe_to_dict(recipe, db)
 
 
 @app.delete("/api/recipes/{recipe_id}", status_code=204)
