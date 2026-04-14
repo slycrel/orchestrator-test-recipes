@@ -77,6 +77,19 @@ def startup():
 
 # ── helpers ──────────────────────────────────────────────────────────────────
 
+
+def _safe_json_load(value: str, fallback, recipe_id=None, field: str = ""):
+    """Parse JSON string; return fallback and log on decode error."""
+    try:
+        return json.loads(value)
+    except (json.JSONDecodeError, TypeError) as exc:
+        import logging
+        logging.getLogger(__name__).error(
+            "json decode error in recipe %s field %r: %s", recipe_id, field, exc
+        )
+        return fallback
+
+
 def recipe_to_dict(recipe: Recipe, db: Optional[Session] = None) -> dict:
     # Use SQL aggregates when a session is available to avoid N+1 lazy loading.
     if db is not None:
@@ -97,8 +110,8 @@ def recipe_to_dict(recipe: Recipe, db: Optional[Session] = None) -> dict:
     return {
         "id": recipe.id,
         "name": recipe.name,
-        "ingredients": json.loads(recipe.ingredients) if recipe.ingredients else [],
-        "steps": json.loads(recipe.steps) if recipe.steps else [],
+        "ingredients": _safe_json_load(recipe.ingredients, [], recipe.id, "ingredients") if recipe.ingredients else [],
+        "steps": _safe_json_load(recipe.steps, [], recipe.id, "steps") if recipe.steps else [],
         "photo_url": recipe.photo_url or "",
         "tags": [t.strip() for t in (recipe.tags or "").split(",") if t.strip()],
         "avg_rating": avg_rating,

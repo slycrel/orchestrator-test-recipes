@@ -1,38 +1,16 @@
 """Comprehensive pytest tests for Recipe API and search functionality."""
 import json
 import os
-import tempfile
 import pytest
 from sqlalchemy.orm import Session
 from fastapi.testclient import TestClient
 
-# Use a temporary database for tests
-test_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
-test_db_path = test_db.name
-test_db.close()
-os.environ["DATABASE_URL"] = f"sqlite:///{test_db_path}"
-
+# DATABASE_URL is set by conftest.py before this module is loaded.
 from src.main import app, get_db
 from src.models import Base, Recipe, Review, init_db, create_db_engine
 
 
-@pytest.fixture(scope="function")
-def db_engine():
-    """Create a fresh in-memory database for each test."""
-    engine = create_db_engine(f"sqlite:///{test_db_path}", echo=False)
-    Base.metadata.drop_all(engine)
-    init_db(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
-
-
-@pytest.fixture(scope="function")
-def db(db_engine):
-    """Get a session for the test database."""
-    from src.models import get_session
-    db = get_session(db_engine)
-    yield db
-    db.close()
+# db_engine and db fixtures provided by conftest.py.
 
 
 @pytest.fixture(scope="function")

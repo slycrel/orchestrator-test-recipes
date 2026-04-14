@@ -3,7 +3,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, DateTime, create_engine
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, DateTime, create_engine, CheckConstraint
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 from sqlalchemy import text
 
@@ -33,7 +33,11 @@ class Review(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
-    rating = Column(Integer, nullable=False)   # 1-5
+    rating = Column(
+        Integer,
+        CheckConstraint("rating >= 1 AND rating <= 5", name="ck_review_rating_range"),
+        nullable=False,
+    )  # 1-5, enforced at DB level
     text = Column(Text, nullable=True)
     created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 

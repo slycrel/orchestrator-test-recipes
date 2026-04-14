@@ -1,26 +1,14 @@
 """Tests for POST /recipes body-size cap and per-IP rate limit."""
 import os
-import tempfile
 import pytest
 from fastapi.testclient import TestClient
 
-# Temp DB (mirrors test_api.py pattern).
-_test_db = tempfile.NamedTemporaryFile(delete=False, suffix=".db")
-_test_db_path = _test_db.name
-_test_db.close()
-os.environ["DATABASE_URL"] = f"sqlite:///{_test_db_path}"
-
+# DATABASE_URL is set by conftest.py before this module is loaded.
 from src.main import app, get_db, limiter, MAX_RECIPE_BODY_BYTES
 from src.models import Base, init_db, create_db_engine, get_session
 
 
-@pytest.fixture(scope="function")
-def db_engine():
-    engine = create_db_engine(f"sqlite:///{_test_db_path}", echo=False)
-    Base.metadata.drop_all(engine)
-    init_db(engine)
-    yield engine
-    Base.metadata.drop_all(engine)
+# db_engine fixture provided by conftest.py.
 
 
 @pytest.fixture(scope="function")
