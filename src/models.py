@@ -1,8 +1,9 @@
 import os
 import json
+from datetime import datetime, timezone
 from typing import List, Optional
 from pydantic import BaseModel, field_validator
-from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, create_engine
+from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, DateTime, create_engine
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 from sqlalchemy import text
 
@@ -22,6 +23,7 @@ class Recipe(Base):
     steps = Column(Text, nullable=False)         # JSON-encoded list
     photo_url = Column(String(512), nullable=True)
     tags = Column(String(512), nullable=True)    # comma-separated
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     reviews = relationship("Review", back_populates="recipe", cascade="all, delete-orphan")
 
@@ -33,6 +35,7 @@ class Review(Base):
     recipe_id = Column(Integer, ForeignKey("recipes.id"), nullable=False)
     rating = Column(Integer, nullable=False)   # 1-5
     text = Column(Text, nullable=True)
+    created_at = Column(DateTime, nullable=False, default=lambda: datetime.now(timezone.utc))
 
     recipe = relationship("Recipe", back_populates="reviews")
 

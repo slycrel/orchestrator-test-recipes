@@ -103,6 +103,7 @@ def recipe_to_dict(recipe: Recipe, db: Optional[Session] = None) -> dict:
         "tags": [t.strip() for t in (recipe.tags or "").split(",") if t.strip()],
         "avg_rating": avg_rating,
         "review_count": review_count,
+        "created_at": recipe.created_at.isoformat() if recipe.created_at else None,
     }
 
 

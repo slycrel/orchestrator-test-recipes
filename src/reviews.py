@@ -12,7 +12,13 @@ router = APIRouter()
 
 
 def _review_dict(r: Review) -> dict:
-    return {"id": r.id, "recipe_id": r.recipe_id, "rating": r.rating, "text": r.text or ""}
+    return {
+        "id": r.id,
+        "recipe_id": r.recipe_id,
+        "rating": r.rating,
+        "text": r.text or "",
+        "created_at": r.created_at.isoformat() if r.created_at else None,
+    }
 
 
 def _sql_aggregate(db: Session, recipe_id: int):
