@@ -3,8 +3,9 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
-from fastapi.responses import HTMLResponse, RedirectResponse, PlainTextResponse
+from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
+from sqlalchemy.exc import IntegrityError, SQLAlchemyError
 from sqlalchemy.orm import Session
 from sqlalchemy import text, func
 from slowapi import Limiter
@@ -40,7 +41,19 @@ def _rate_limit_handler(request: Request, exc: RateLimitExceeded) -> PlainTextRe
     return PlainTextResponse("Too Many Requests", status_code=429)
 
 
+def _integrity_error_handler(request: Request, exc: IntegrityError) -> JSONResponse:
+    return JSONResponse({"detail": "Constraint violation: invalid data"}, status_code=422)
+
+
+def _sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONResponse:
+    import logging
+    logging.getLogger(__name__).error("Database error: %s", exc)
+    return JSONResponse({"detail": "Database error"}, status_code=500)
+
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
+app.add_exception_handler(IntegrityError, _integrity_error_handler)
+app.add_exception_handler(SQLAlchemyError, _sqlalchemy_error_handler)
 
 
 @app.middleware("http")
