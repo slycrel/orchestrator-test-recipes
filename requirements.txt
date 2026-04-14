@@ -6,3 +6,4 @@ aiofiles
 pytest
 httpx
 python-multipart
+slowapi
