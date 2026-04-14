@@ -234,6 +234,9 @@ def create_recipe(
     try:
         db.commit()
         db.refresh(recipe)
+    except IntegrityError:
+        db.rollback()
+        return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": "A recipe with that name already exists."})
     except SQLAlchemyError:
         db.rollback()
         return templates.TemplateResponse(request, "form.html", {"recipe": None, "error": "Could not save recipe. Please try again."})
@@ -263,9 +266,12 @@ def update_recipe(
     recipe.tags = tags.strip() or None
     try:
         db.commit()
+    except IntegrityError:
+        db.rollback()
+        return templates.TemplateResponse(request, "form.html", {"recipe": recipe_to_dict(recipe, db), "error": "A recipe with that name already exists."})
     except SQLAlchemyError:
         db.rollback()
-        return templates.TemplateResponse(request, "form.html", {"recipe": recipe, "error": "Could not save changes. Please try again."})
+        return templates.TemplateResponse(request, "form.html", {"recipe": recipe_to_dict(recipe, db), "error": "Could not save changes. Please try again."})
     return RedirectResponse(url=f"/recipes/{recipe_id}", status_code=303)
 
 

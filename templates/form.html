@@ -3,6 +3,12 @@
 {% block content %}
 <h1 style="margin-bottom:1.5rem;">{{ "Edit" if recipe else "New" }} Recipe</h1>
 
+{% if error %}
+<div style="background:#fde;border:1px solid #c00;border-radius:4px;padding:0.75rem 1rem;margin-bottom:1rem;color:#900;">
+    {{ error }}
+</div>
+{% endif %}
+
 <form method="post" action="{{ '/recipes/' + recipe.id|string + '/edit' if recipe else '/recipes' }}"
       style="background:white;border:1px solid #ddd;border-radius:6px;padding:1.5rem;max-width:650px;">
 

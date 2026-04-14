@@ -18,7 +18,7 @@ class Recipe(Base):
     __tablename__ = "recipes"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(255), nullable=False)
+    name = Column(String(255), nullable=False, unique=True)
     ingredients = Column(Text, nullable=False)  # JSON-encoded list
     steps = Column(Text, nullable=False)         # JSON-encoded list
     photo_url = Column(String(512), nullable=True)

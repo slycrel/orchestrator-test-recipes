@@ -807,5 +807,81 @@ class TestHTMLBlankName:
         assert r.json()["name"] == "Original"
 
 
+class TestHTMLDuplicateName:
+    """Duplicate name submissions via HTML forms should re-render the form with an error."""
+
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
+
+    def test_create_duplicate_name_returns_form(self, client):
+        # Create a recipe so the name is taken.
+        client.post(
+            "/recipes",
+            data={"name": "Taken Name", "ingredients": "egg", "steps": "boil"},
+            follow_redirects=False,
+        )
+        # Second create with the same name should re-render the form (200), not 422 JSON.
+        resp = client.post(
+            "/recipes",
+            data={"name": "Taken Name", "ingredients": "butter", "steps": "melt"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 200
+        assert b"already exists" in resp.content.lower()
+
+    def test_create_duplicate_name_shows_error_in_html(self, client):
+        client.post(
+            "/recipes",
+            data={"name": "Unique Recipe", "ingredients": "salt", "steps": "add salt"},
+            follow_redirects=False,
+        )
+        resp = client.post(
+            "/recipes",
+            data={"name": "Unique Recipe", "ingredients": "pepper", "steps": "add pepper"},
+            follow_redirects=False,
+        )
+        assert b"<form" in resp.content.lower()
+        assert b"already exists" in resp.content.lower()
+
+    def test_edit_to_duplicate_name_returns_form(self, client):
+        # Create two recipes.
+        client.post(
+            "/recipes",
+            data={"name": "Alpha", "ingredients": "a", "steps": "s1"},
+            follow_redirects=False,
+        )
+        r = client.post("/api/recipes", json={"name": "Beta", "ingredients": [], "steps": []})
+        beta_id = r.json()["id"]
+        # Try to rename Beta to Alpha.
+        resp = client.post(
+            f"/recipes/{beta_id}/edit",
+            data={"name": "Alpha", "ingredients": "b", "steps": "s2"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 200
+        assert b"already exists" in resp.content.lower()
+
+    def test_edit_to_duplicate_name_does_not_corrupt_record(self, client):
+        client.post(
+            "/recipes",
+            data={"name": "Gamma", "ingredients": "g", "steps": "s"},
+            follow_redirects=False,
+        )
+        r = client.post("/api/recipes", json={"name": "Delta", "ingredients": [], "steps": []})
+        delta_id = r.json()["id"]
+        client.post(
+            f"/recipes/{delta_id}/edit",
+            data={"name": "Gamma", "ingredients": "d", "steps": "s"},
+            follow_redirects=False,
+        )
+        # Delta should still be named Delta.
+        r = client.get(f"/api/recipes/{delta_id}")
+        assert r.json()["name"] == "Delta"
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
