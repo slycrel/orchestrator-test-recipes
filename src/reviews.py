@@ -53,8 +53,6 @@ def api_create_review(recipe_id: int, payload: ReviewCreate, db: Session = Depen
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    if not (1 <= payload.rating <= 5):
-        raise HTTPException(status_code=422, detail="Rating must be 1-5")
     review = Review(recipe_id=recipe_id, rating=payload.rating, text=payload.text or "")
     db.add(review)
     db.commit()
@@ -89,8 +87,6 @@ def html_add_review(
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    if not (1 <= rating <= 5):
-        raise HTTPException(status_code=422, detail="Rating must be 1-5")
     review = Review(recipe_id=recipe_id, rating=rating, text=text.strip() or None)
     db.add(review)
     db.commit()

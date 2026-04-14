@@ -3,6 +3,7 @@ import os
 from typing import Optional
 
 from fastapi import FastAPI, Request, Form, HTTPException, Depends
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import HTMLResponse, JSONResponse, RedirectResponse, PlainTextResponse
 from fastapi.templating import Jinja2Templates
 from sqlalchemy.exc import IntegrityError, SQLAlchemyError
@@ -51,9 +52,17 @@ def _sqlalchemy_error_handler(request: Request, exc: SQLAlchemyError) -> JSONRes
     return JSONResponse({"detail": "Database error"}, status_code=500)
 
 
+def _validation_error_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    # Flatten Pydantic validation errors into a single human-readable string
+    messages = [e.get("msg", str(e)) for e in exc.errors()]
+    detail = "; ".join(messages)
+    return JSONResponse({"detail": detail}, status_code=422)
+
+
 app.add_exception_handler(RateLimitExceeded, _rate_limit_handler)
 app.add_exception_handler(IntegrityError, _integrity_error_handler)
 app.add_exception_handler(SQLAlchemyError, _sqlalchemy_error_handler)
+app.add_exception_handler(RequestValidationError, _validation_error_handler)
 
 
 @app.middleware("http")

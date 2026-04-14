@@ -78,6 +78,13 @@ class ReviewCreate(BaseModel):
     rating: int
     text: Optional[str] = None
 
+    @field_validator("rating")
+    @classmethod
+    def rating_in_range(cls, v: int) -> int:
+        if not (1 <= v <= 5):
+            raise ValueError("Rating must be 1-5")
+        return v
+
 
 def create_db_engine(url: str = DATABASE_URL, *, echo: bool = False):
     connect_args = {}
