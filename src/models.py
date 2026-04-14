@@ -91,13 +91,13 @@ def init_db(engine=None):
         # Standalone FTS5 table — simpler, always consistent
         conn.execute(text("""
             CREATE VIRTUAL TABLE IF NOT EXISTS recipes_fts
-            USING fts5(recipe_id UNINDEXED, name, ingredients, tags)
+            USING fts5(recipe_id UNINDEXED, name, ingredients, tags, steps)
         """))
         # Triggers to keep FTS in sync
         conn.execute(text("""
             CREATE TRIGGER IF NOT EXISTS recipes_ai AFTER INSERT ON recipes BEGIN
-                INSERT INTO recipes_fts(recipe_id, name, ingredients, tags)
-                VALUES (new.id, new.name, new.ingredients, COALESCE(new.tags, ''));
+                INSERT INTO recipes_fts(recipe_id, name, ingredients, tags, steps)
+                VALUES (new.id, new.name, new.ingredients, COALESCE(new.tags, ''), COALESCE(new.steps, ''));
             END
         """))
         conn.execute(text("""
@@ -108,8 +108,8 @@ def init_db(engine=None):
         conn.execute(text("""
             CREATE TRIGGER IF NOT EXISTS recipes_au AFTER UPDATE ON recipes BEGIN
                 DELETE FROM recipes_fts WHERE recipe_id = old.id;
-                INSERT INTO recipes_fts(recipe_id, name, ingredients, tags)
-                VALUES (new.id, new.name, new.ingredients, COALESCE(new.tags, ''));
+                INSERT INTO recipes_fts(recipe_id, name, ingredients, tags, steps)
+                VALUES (new.id, new.name, new.ingredients, COALESCE(new.tags, ''), COALESCE(new.steps, ''));
             END
         """))
         conn.commit()
