@@ -883,5 +883,184 @@ class TestHTMLDuplicateName:
         assert r.json()["name"] == "Delta"
 
 
+class TestRateLimit:
+    """Rate limiting: both /recipes and /api/recipes enforce 10/minute."""
+
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
+
+    def test_api_create_recipe_rate_limited(self, client):
+        """11th POST /api/recipes in a minute returns 429."""
+        for i in range(10):
+            r = client.post(
+                "/api/recipes",
+                json={"name": f"Rate Test {i}", "ingredients": [], "steps": []},
+            )
+            assert r.status_code == 201, f"Request {i} failed with {r.status_code}"
+        r = client.post(
+            "/api/recipes",
+            json={"name": "Rate Test 10", "ingredients": [], "steps": []},
+        )
+        assert r.status_code == 429
+
+    def test_api_rate_limit_response_is_plain_text(self, client):
+        """429 response body is plain text, not JSON."""
+        for i in range(10):
+            client.post(
+                "/api/recipes",
+                json={"name": f"Rate Txt {i}", "ingredients": [], "steps": []},
+            )
+        r = client.post(
+            "/api/recipes",
+            json={"name": "Rate Txt 10", "ingredients": [], "steps": []},
+        )
+        assert r.status_code == 429
+        assert b"too many requests" in r.content.lower()
+
+    def test_html_create_recipe_rate_limited(self, client):
+        """11th POST /recipes (HTML form) in a minute returns 429."""
+        for i in range(10):
+            client.post(
+                "/recipes",
+                data={"name": f"HTML Rate {i}", "ingredients": "egg", "steps": "boil"},
+                follow_redirects=False,
+            )
+        r = client.post(
+            "/recipes",
+            data={"name": "HTML Rate 10", "ingredients": "egg", "steps": "boil"},
+            follow_redirects=False,
+        )
+        assert r.status_code == 429
+
+    def test_rate_limit_resets_after_limiter_reset(self, client):
+        """After limiter.reset(), the counter clears."""
+        from src.main import limiter
+        for i in range(10):
+            client.post(
+                "/api/recipes",
+                json={"name": f"Reset Test {i}", "ingredients": [], "steps": []},
+            )
+        limiter.reset()
+        r = client.post(
+            "/api/recipes",
+            json={"name": "Reset Test Post Reset", "ingredients": [], "steps": []},
+        )
+        assert r.status_code == 201
+
+
+class TestBodySizeGuard:
+    """Middleware rejects POST /recipes and /api/recipes payloads over 32 KB."""
+
+    def test_api_create_recipe_oversized_payload_rejected(self, client):
+        """POST /api/recipes with body > 32768 bytes returns 413."""
+        # 33 KB name field — safely over the 32 KB limit
+        big_name = "x" * 33_000
+        r = client.post(
+            "/api/recipes",
+            json={"name": big_name, "ingredients": [], "steps": []},
+        )
+        assert r.status_code == 413
+
+    def test_html_create_recipe_oversized_payload_rejected(self, client):
+        """POST /recipes (form) with body > 32768 bytes returns 413."""
+        big_steps = "a very long step description\n" * 1_200  # ~36 KB
+        r = client.post(
+            "/recipes",
+            data={"name": "Big Recipe", "ingredients": "egg", "steps": big_steps},
+            follow_redirects=False,
+        )
+        assert r.status_code == 413
+
+    def test_api_create_recipe_at_limit_succeeds(self, client):
+        """POST /api/recipes with body near but under 32768 bytes succeeds."""
+        # 200-char name is well under the limit
+        r = client.post(
+            "/api/recipes",
+            json={"name": "Normal Recipe", "ingredients": [], "steps": []},
+        )
+        assert r.status_code == 201
+
+
+class TestHTMLSearchAndPagination:
+    """HTML index page: ?q= search and ?page= pagination."""
+
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
+
+    def _seed_db(self, db, n, prefix="Paginated"):
+        """Insert recipes directly into the DB to bypass rate limiting."""
+        import json
+        from src.models import Recipe
+        for i in range(n):
+            db.add(Recipe(
+                name=f"{prefix} Recipe {i:03d}",
+                ingredients=json.dumps(["flour"]),
+                steps=json.dumps(["mix"]),
+            ))
+        db.commit()
+
+    def test_search_filters_html_results(self, client):
+        """GET /?q=<term> returns only matching recipes in HTML."""
+        client.post("/api/recipes", json={"name": "Spaghetti Bolognese", "ingredients": [], "steps": []})
+        client.post("/api/recipes", json={"name": "Chicken Soup", "ingredients": [], "steps": []})
+        resp = client.get("/?q=Spaghetti")
+        assert resp.status_code == 200
+        assert b"Spaghetti" in resp.content
+        assert b"Chicken Soup" not in resp.content
+
+    def test_search_no_match_shows_no_recipes(self, client):
+        """GET /?q=nomatch returns 0 results in HTML."""
+        client.post("/api/recipes", json={"name": "Tacos", "ingredients": [], "steps": []})
+        resp = client.get("/?q=xyznotfound")
+        assert resp.status_code == 200
+        assert b"Tacos" not in resp.content
+
+    def test_search_result_count_in_html(self, client):
+        """Search result count reflects actual matches."""
+        client.post("/api/recipes", json={"name": "Tomato Soup", "ingredients": ["tomato"], "steps": []})
+        client.post("/api/recipes", json={"name": "Tomato Pasta", "ingredients": ["tomato"], "steps": []})
+        client.post("/api/recipes", json={"name": "Beef Stew", "ingredients": [], "steps": []})
+        resp = client.get("/?q=Tomato")
+        assert resp.status_code == 200
+        assert b"Tomato Soup" in resp.content
+        assert b"Tomato Pasta" in resp.content
+        assert b"Beef Stew" not in resp.content
+
+    def test_pagination_page2_has_different_recipes(self, client, db):
+        """GET /?page=2 returns the second page of recipes."""
+        self._seed_db(db, 25)
+        resp1 = client.get("/?page=1")
+        resp2 = client.get("/?page=2")
+        assert resp1.status_code == 200
+        assert resp2.status_code == 200
+        # Recipes 000-019 land on page 1, recipes 020-024 on page 2
+        assert b"Recipe 020" in resp2.content
+        assert b"Recipe 020" not in resp1.content
+
+    def test_pagination_nav_links_include_search_term(self, client, db):
+        """Pagination links preserve ?q= across pages."""
+        self._seed_db(db, 25, prefix="Harvest")
+        resp = client.get("/?q=Harvest&page=1")
+        assert resp.status_code == 200
+        # Next page link must include &q=Harvest (so search is preserved across pages)
+        assert b"q=Harvest" in resp.content or b"q=harvest" in resp.content.lower()
+
+    def test_pagination_out_of_range_page_returns_empty(self, client):
+        """GET /?page=9999 with few recipes returns empty list gracefully."""
+        client.post("/api/recipes", json={"name": "Solo Recipe", "ingredients": [], "steps": []})
+        resp = client.get("/?page=9999")
+        assert resp.status_code == 200
+        # Solo Recipe should not appear on page 9999
+        assert b"Solo Recipe" not in resp.content
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])
