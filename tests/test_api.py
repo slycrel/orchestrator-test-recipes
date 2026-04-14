@@ -583,6 +583,84 @@ class TestApiRecipeValidation:
         r = client.put(f"/api/recipes/{recipe_id}", json={"ingredients": "oops"})
         assert r.status_code == 422
 
+    def test_create_photo_url_too_long(self, client):
+        long_url = "https://example.com/" + "x" * 500
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": [], "photo_url": long_url})
+        assert r.status_code == 422
+
+    def test_create_photo_url_at_limit_passes(self, client):
+        ok_url = "https://example.com/" + "x" * 490  # 512 total
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": [], "photo_url": ok_url})
+        assert r.status_code == 201
+
+    def test_update_photo_url_too_long(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        long_url = "https://example.com/" + "x" * 500
+        r = client.put(f"/api/recipes/{recipe_id}", json={"photo_url": long_url})
+        assert r.status_code == 422
+
+    def test_create_review_text_too_long(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        r = client.post(f"/api/recipes/{recipe_id}/reviews", json={"rating": 5, "text": "x" * 5000})
+        assert r.status_code == 422
+
+    def test_create_review_text_at_limit_passes(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        r = client.post(f"/api/recipes/{recipe_id}/reviews", json={"rating": 5, "text": "x" * 4096})
+        assert r.status_code == 201
+
+
+class TestHTMLBlankName:
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
+
+    def test_edit_blank_name_rejected(self, client):
+        # Create a recipe first.
+        r = client.post("/api/recipes", json={"name": "Original", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        # Attempt to update via HTML form with blank name.
+        resp = client.post(
+            f"/recipes/{recipe_id}/edit",
+            data={"name": "", "ingredients": "", "steps": "step1"},
+            follow_redirects=False,
+        )
+        # Empty name is rejected — either 422 (FastAPI form validation) or
+        # 200 with error message (handler-level check for whitespace-only).
+        assert resp.status_code in (200, 422)
+
+    def test_edit_whitespace_name_rejected(self, client):
+        r = client.post("/api/recipes", json={"name": "Original", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        resp = client.post(
+            f"/recipes/{recipe_id}/edit",
+            data={"name": "   ", "ingredients": "", "steps": "step1"},
+            follow_redirects=False,
+        )
+        # Whitespace-only name is rejected — 422 (FastAPI) or 200 with error (handler).
+        assert resp.status_code in (200, 422)
+        if resp.status_code == 200:
+            assert b"required" in resp.content.lower() or b"error" in resp.content.lower()
+
+    def test_edit_blank_name_does_not_corrupt_record(self, client):
+        r = client.post("/api/recipes", json={"name": "Original", "ingredients": [], "steps": []})
+        recipe_id = r.json()["id"]
+        # Try blank name update — should be rejected.
+        client.post(
+            f"/recipes/{recipe_id}/edit",
+            data={"name": "", "ingredients": "", "steps": "step1"},
+            follow_redirects=False,
+        )
+        # Original name should be unchanged.
+        r = client.get(f"/api/recipes/{recipe_id}")
+        assert r.json()["name"] == "Original"
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

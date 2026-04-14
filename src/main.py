@@ -234,6 +234,10 @@ def update_recipe(
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
+    if not name.strip():
+        return templates.TemplateResponse("form.html", {
+            "request": request, "recipe": recipe, "error": "Name is required."
+        })
     recipe.name = name.strip()
     recipe.ingredients = json.dumps([i.strip() for i in ingredients.splitlines() if i.strip()])
     recipe.steps = json.dumps([s.strip() for s in steps.splitlines() if s.strip()])

@@ -116,6 +116,16 @@ class TestRateLimit:
         resp = client.post("/recipes", data=form, headers=headers_b, follow_redirects=False)
         assert resp.status_code == 303
 
+    def test_api_endpoint_rate_limited(self, client):
+        # POST /api/recipes should be rate-limited the same as POST /recipes.
+        payload = {"name": "api-test", "ingredients": ["one"], "steps": ["step"]}
+        headers = {"X-Forwarded-For": "192.0.2.30"}
+        for i in range(10):
+            resp = client.post("/api/recipes", json=payload, headers=headers)
+            assert resp.status_code == 201, f"request {i + 1} expected 201, got {resp.status_code}"
+        resp = client.post("/api/recipes", json=payload, headers=headers)
+        assert resp.status_code == 429
+
 
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

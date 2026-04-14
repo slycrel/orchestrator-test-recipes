@@ -44,6 +44,10 @@ class Review(Base):
     recipe = relationship("Recipe", back_populates="reviews")
 
 
+PHOTO_URL_MAX_LEN = 512
+REVIEW_TEXT_MAX_LEN = 4096
+
+
 class RecipeCreate(BaseModel):
     name: str
     ingredients: List[str] = []
@@ -57,6 +61,13 @@ class RecipeCreate(BaseModel):
         if not v or not v.strip():
             raise ValueError("name must not be empty")
         return v.strip()
+
+    @field_validator("photo_url")
+    @classmethod
+    def photo_url_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > PHOTO_URL_MAX_LEN:
+            raise ValueError(f"photo_url must not exceed {PHOTO_URL_MAX_LEN} characters")
+        return v
 
 
 class RecipeUpdate(BaseModel):
@@ -73,6 +84,13 @@ class RecipeUpdate(BaseModel):
             raise ValueError("name must not be empty")
         return v.strip() if v is not None else v
 
+    @field_validator("photo_url")
+    @classmethod
+    def photo_url_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > PHOTO_URL_MAX_LEN:
+            raise ValueError(f"photo_url must not exceed {PHOTO_URL_MAX_LEN} characters")
+        return v
+
 
 class ReviewCreate(BaseModel):
     rating: int
@@ -83,6 +101,13 @@ class ReviewCreate(BaseModel):
     def rating_in_range(cls, v: int) -> int:
         if not (1 <= v <= 5):
             raise ValueError("Rating must be 1-5")
+        return v
+
+    @field_validator("text")
+    @classmethod
+    def text_length(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and len(v) > REVIEW_TEXT_MAX_LEN:
+            raise ValueError(f"text must not exceed {REVIEW_TEXT_MAX_LEN} characters")
         return v
 
 
