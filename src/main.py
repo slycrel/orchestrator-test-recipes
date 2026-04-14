@@ -154,14 +154,31 @@ def fts_search(db: Session, term: str) -> list[int]:
 # ── HTML pages ────────────────────────────────────────────────────────────────
 
 @app.get("/", response_class=HTMLResponse)
-def index(request: Request, q: Optional[str] = None, db: Session = Depends(get_db)):
+def index(
+    request: Request,
+    q: Optional[str] = None,
+    page: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    page = max(1, page or 1)
+    lim = PAGINATION_DEFAULT_LIMIT
+    off = (page - 1) * lim
+    base_q = db.query(Recipe)
     if q and q.strip():
         ids = fts_search(db, q.strip())
-        recipes = db.query(Recipe).filter(Recipe.id.in_(ids)).all() if ids else []
-    else:
-        recipes = db.query(Recipe).all()
+        base_q = base_q.filter(Recipe.id.in_(ids)) if ids else base_q.filter(False)
+    total = base_q.count()
+    recipes = base_q.offset(off).limit(lim).all()
+    total_pages = max(1, (total + lim - 1) // lim)
     items = [recipe_to_dict(r, db) for r in recipes]
-    return templates.TemplateResponse("index.html", {"request": request, "recipes": items, "q": q or ""})
+    return templates.TemplateResponse("index.html", {
+        "request": request,
+        "recipes": items,
+        "q": q or "",
+        "page": page,
+        "total_pages": total_pages,
+        "total": total,
+    })
 
 
 @app.get("/recipes/new", response_class=HTMLResponse)
@@ -271,14 +288,36 @@ def delete_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 # ── JSON API ──────────────────────────────────────────────────────────────────
 
+PAGINATION_DEFAULT_LIMIT = 20
+PAGINATION_MAX_LIMIT = 100
+
+
+def _clamp_pagination(limit: Optional[int], offset: Optional[int]) -> tuple[int, int]:
+    lim = max(1, min(limit if limit is not None else PAGINATION_DEFAULT_LIMIT, PAGINATION_MAX_LIMIT))
+    off = max(0, offset if offset is not None else 0)
+    return lim, off
+
+
 @app.get("/api/recipes")
-def api_list_recipes(q: Optional[str] = None, db: Session = Depends(get_db)):
+def api_list_recipes(
+    q: Optional[str] = None,
+    limit: Optional[int] = None,
+    offset: Optional[int] = None,
+    db: Session = Depends(get_db),
+):
+    lim, off = _clamp_pagination(limit, offset)
+    base_q = db.query(Recipe)
     if q and q.strip():
         ids = fts_search(db, q.strip())
-        recipes = db.query(Recipe).filter(Recipe.id.in_(ids)).all() if ids else []
-    else:
-        recipes = db.query(Recipe).all()
-    return [recipe_to_dict(r, db) for r in recipes]
+        base_q = base_q.filter(Recipe.id.in_(ids)) if ids else base_q.filter(False)
+    total = base_q.count()
+    recipes = base_q.offset(off).limit(lim).all()
+    return {
+        "total": total,
+        "limit": lim,
+        "offset": off,
+        "items": [recipe_to_dict(r, db) for r in recipes],
+    }
 
 
 @app.get("/api/recipes/{recipe_id}")

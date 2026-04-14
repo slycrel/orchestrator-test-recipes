@@ -107,9 +107,9 @@ class TestRecipeCRUD:
         response = client.get("/api/recipes")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
-        assert any(r["name"] == "Recipe 1" for r in data)
-        assert any(r["name"] == "Recipe 2" for r in data)
+        assert data["total"] == 2
+        assert any(r["name"] == "Recipe 1" for r in data["items"])
+        assert any(r["name"] == "Recipe 2" for r in data["items"])
 
     def test_update_recipe_via_api(self, client, db):
         """Update a recipe."""
@@ -181,8 +181,8 @@ class TestFullTextSearch:
         response = client.get("/api/recipes?q=Chocolate")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["name"] == "Chocolate Cake"
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "Chocolate Cake"
 
     def test_search_by_ingredient(self, client, db):
         """Search recipes by ingredient."""
@@ -205,8 +205,8 @@ class TestFullTextSearch:
         response = client.get("/api/recipes?q=bacon")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
-        assert data[0]["name"] == "Pasta Carbonara"
+        assert data["total"] == 1
+        assert data["items"][0]["name"] == "Pasta Carbonara"
 
     def test_search_by_tag(self, client, db):
         """Search recipes by tag."""
@@ -229,7 +229,7 @@ class TestFullTextSearch:
         response = client.get("/api/recipes?q=vegetarian")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
+        assert data["total"] == 2
 
     def test_search_empty_query(self, client, db):
         """Empty search query returns all recipes."""
@@ -249,7 +249,7 @@ class TestFullTextSearch:
         response = client.get("/api/recipes?q=")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
+        assert data["total"] == 2
 
     def test_search_no_results(self, client, db):
         """Search with no matching results."""
@@ -264,7 +264,7 @@ class TestFullTextSearch:
         response = client.get("/api/recipes?q=nonexistent_ingredient")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 0
+        assert data["total"] == 0
 
 
 class TestReviewSystem:
@@ -523,7 +523,7 @@ class TestSearchIntegration:
         response = client.get("/api/recipes?q=tomato")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 2
+        assert data["total"] == 2
 
     def test_fts_special_characters(self, client, db):
         """FTS handles special characters in search."""
@@ -540,7 +540,82 @@ class TestSearchIntegration:
         response = client.get("/api/recipes?q=Fish")
         assert response.status_code == 200
         data = response.json()
-        assert len(data) == 1
+        assert data["total"] == 1
+
+
+class TestPagination:
+    """Tests for GET /api/recipes pagination."""
+
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
+
+    def test_default_limit_applied(self, client, db):
+        """Default response has total, limit, offset, items keys."""
+        r = client.get("/api/recipes")
+        assert r.status_code == 200
+        data = r.json()
+        assert "total" in data
+        assert "limit" in data
+        assert "offset" in data
+        assert "items" in data
+        assert data["limit"] == 20
+        assert data["offset"] == 0
+
+    def test_explicit_limit_and_offset(self, client, db):
+        """limit and offset query params slice correctly."""
+        for i in range(5):
+            r = client.post("/api/recipes", json={"name": f"R{i}", "ingredients": [], "steps": []})
+            assert r.status_code == 201
+
+        # Get first 2
+        r = client.get("/api/recipes?limit=2&offset=0")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total"] == 5
+        assert data["limit"] == 2
+        assert data["offset"] == 0
+        assert len(data["items"]) == 2
+
+        # Get next 2
+        r2 = client.get("/api/recipes?limit=2&offset=2")
+        assert r2.status_code == 200
+        d2 = r2.json()
+        assert len(d2["items"]) == 2
+        # No overlap
+        ids1 = {x["id"] for x in data["items"]}
+        ids2 = {x["id"] for x in d2["items"]}
+        assert ids1.isdisjoint(ids2)
+
+    def test_offset_beyond_total_returns_empty(self, client, db):
+        """offset past the end returns empty items but correct total."""
+        client.post("/api/recipes", json={"name": "Only", "ingredients": [], "steps": []})
+        r = client.get("/api/recipes?limit=10&offset=100")
+        assert r.status_code == 200
+        data = r.json()
+        assert data["total"] == 1
+        assert data["items"] == []
+
+    def test_max_limit_capped_at_100(self, client, db):
+        """limit > 100 is clamped to 100."""
+        r = client.get("/api/recipes?limit=9999")
+        assert r.status_code == 200
+        assert r.json()["limit"] == 100
+
+    def test_limit_zero_clamped_to_1(self, client, db):
+        """limit=0 is clamped to 1."""
+        r = client.get("/api/recipes?limit=0")
+        assert r.status_code == 200
+        assert r.json()["limit"] == 1
+
+    def test_negative_offset_clamped_to_zero(self, client, db):
+        """Negative offset is clamped to 0."""
+        r = client.get("/api/recipes?offset=-5")
+        assert r.status_code == 200
+        assert r.json()["offset"] == 0
 
 
 class TestSharedDbDependency:
@@ -592,6 +667,13 @@ class TestSharedDbDependency:
 
 class TestApiRecipeValidation:
     """Negative-path tests for POST /api/recipes and PUT /api/recipes/{id} — closes #7 and #10."""
+
+    @pytest.fixture(autouse=True)
+    def reset_limiter(self):
+        from src.main import limiter
+        limiter.reset()
+        yield
+        limiter.reset()
 
     def test_create_missing_name(self, client):
         r = client.post("/api/recipes", json={"ingredients": ["a"], "steps": ["b"]})

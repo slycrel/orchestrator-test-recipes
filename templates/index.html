@@ -11,7 +11,7 @@
 </form>
 
 {% if q %}
-<p style="margin-bottom:1rem;color:#666;">Results for "<strong>{{ q }}</strong>" — {{ recipes|length }} found</p>
+<p style="margin-bottom:1rem;color:#666;">Results for "<strong>{{ q }}</strong>" — {{ total }} found</p>
 {% endif %}
 
 {% if recipes %}
@@ -44,5 +44,17 @@
 </div>
 {% else %}
 <p style="color:#666;">No recipes yet. <a href="/recipes/new" style="color:#8B2500;">Add the first one!</a></p>
+{% endif %}
+
+{% if total_pages and total_pages > 1 %}
+<div style="display:flex;gap:0.5rem;align-items:center;justify-content:center;margin-top:1.5rem;">
+    {% if page > 1 %}
+    <a href="/?page={{ page - 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-secondary">&#8592; Prev</a>
+    {% endif %}
+    <span style="color:#666;font-size:0.9rem;">Page {{ page }} of {{ total_pages }}</span>
+    {% if page < total_pages %}
+    <a href="/?page={{ page + 1 }}{% if q %}&q={{ q }}{% endif %}" class="btn btn-secondary">Next &#8594;</a>
+    {% endif %}
+</div>
 {% endif %}
 {% endblock %}
