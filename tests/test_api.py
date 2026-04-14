@@ -549,5 +549,62 @@ class TestSharedDbDependency:
         assert hasattr(models_mod, "_engine")
 
 
+class TestApiRecipeValidation:
+    """Negative-path tests for POST /api/recipes and PUT /api/recipes/{id} — closes #7 and #10."""
+
+    def test_create_missing_name(self, client):
+        r = client.post("/api/recipes", json={"ingredients": ["a"], "steps": ["b"]})
+        assert r.status_code == 422
+
+    def test_create_empty_name(self, client):
+        r = client.post("/api/recipes", json={"name": "", "ingredients": [], "steps": []})
+        assert r.status_code == 422
+
+    def test_create_whitespace_name(self, client):
+        r = client.post("/api/recipes", json={"name": "   ", "ingredients": [], "steps": []})
+        assert r.status_code == 422
+
+    def test_create_name_wrong_type(self, client):
+        r = client.post("/api/recipes", json={"name": 42, "ingredients": [], "steps": []})
+        assert r.status_code == 422
+
+    def test_create_ingredients_wrong_type(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": "not a list", "steps": []})
+        assert r.status_code == 422
+
+    def test_create_steps_wrong_type(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": "not a list"})
+        assert r.status_code == 422
+
+    def test_create_empty_body(self, client):
+        r = client.post("/api/recipes", json={})
+        assert r.status_code == 422
+
+    def test_update_empty_name(self, client):
+        # Create a valid recipe first
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+
+        r = client.put(f"/api/recipes/{recipe_id}", json={"name": ""})
+        assert r.status_code == 422
+
+    def test_update_whitespace_name(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+
+        r = client.put(f"/api/recipes/{recipe_id}", json={"name": "   "})
+        assert r.status_code == 422
+
+    def test_update_ingredients_wrong_type(self, client):
+        r = client.post("/api/recipes", json={"name": "Soup", "ingredients": [], "steps": []})
+        assert r.status_code == 201
+        recipe_id = r.json()["id"]
+
+        r = client.put(f"/api/recipes/{recipe_id}", json={"ingredients": "oops"})
+        assert r.status_code == 422
+
+
 if __name__ == "__main__":
     pytest.main([__file__, "-v"])

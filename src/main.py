@@ -10,7 +10,7 @@ from sqlalchemy import text
 from slowapi import Limiter
 from slowapi.errors import RateLimitExceeded
 
-from models import Recipe, Review, init_db, get_engine, get_session, get_db, _get_shared_engine
+from models import Recipe, Review, RecipeCreate, RecipeUpdate, init_db, get_engine, get_session, get_db, _get_shared_engine
 from reviews import router as reviews_router
 
 # Abuse limits for POST /recipes.
@@ -225,13 +225,13 @@ def api_get_recipe(recipe_id: int, db: Session = Depends(get_db)):
 
 
 @app.post("/api/recipes", status_code=201)
-def api_create_recipe(payload: dict, db: Session = Depends(get_db)):
+def api_create_recipe(payload: RecipeCreate, db: Session = Depends(get_db)):
     recipe = Recipe(
-        name=payload["name"],
-        ingredients=json.dumps(payload.get("ingredients", [])),
-        steps=json.dumps(payload.get("steps", [])),
-        photo_url=payload.get("photo_url"),
-        tags=",".join(payload.get("tags", [])) if payload.get("tags") else None,
+        name=payload.name,
+        ingredients=json.dumps(payload.ingredients),
+        steps=json.dumps(payload.steps),
+        photo_url=payload.photo_url,
+        tags=",".join(payload.tags) if payload.tags else None,
     )
     db.add(recipe)
     db.commit()
@@ -240,20 +240,20 @@ def api_create_recipe(payload: dict, db: Session = Depends(get_db)):
 
 
 @app.put("/api/recipes/{recipe_id}")
-def api_update_recipe(recipe_id: int, payload: dict, db: Session = Depends(get_db)):
+def api_update_recipe(recipe_id: int, payload: RecipeUpdate, db: Session = Depends(get_db)):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    if "name" in payload:
-        recipe.name = payload["name"]
-    if "ingredients" in payload:
-        recipe.ingredients = json.dumps(payload["ingredients"])
-    if "steps" in payload:
-        recipe.steps = json.dumps(payload["steps"])
-    if "photo_url" in payload:
-        recipe.photo_url = payload["photo_url"]
-    if "tags" in payload:
-        recipe.tags = ",".join(payload["tags"]) if payload["tags"] else None
+    if payload.name is not None:
+        recipe.name = payload.name
+    if payload.ingredients is not None:
+        recipe.ingredients = json.dumps(payload.ingredients)
+    if payload.steps is not None:
+        recipe.steps = json.dumps(payload.steps)
+    if payload.photo_url is not None:
+        recipe.photo_url = payload.photo_url
+    if payload.tags is not None:
+        recipe.tags = ",".join(payload.tags) if payload.tags else None
     db.commit()
     return recipe_to_dict(recipe)
 

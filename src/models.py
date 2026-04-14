@@ -1,5 +1,7 @@
 import os
 import json
+from typing import List, Optional
+from pydantic import BaseModel, field_validator
 from sqlalchemy import Column, Integer, String, Float, ForeignKey, Text, create_engine
 from sqlalchemy.orm import DeclarativeBase, relationship, Session
 from sqlalchemy import text
@@ -33,6 +35,36 @@ class Review(Base):
     text = Column(Text, nullable=True)
 
     recipe = relationship("Recipe", back_populates="reviews")
+
+
+class RecipeCreate(BaseModel):
+    name: str
+    ingredients: List[str] = []
+    steps: List[str] = []
+    photo_url: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: str) -> str:
+        if not v or not v.strip():
+            raise ValueError("name must not be empty")
+        return v.strip()
+
+
+class RecipeUpdate(BaseModel):
+    name: Optional[str] = None
+    ingredients: Optional[List[str]] = None
+    steps: Optional[List[str]] = None
+    photo_url: Optional[str] = None
+    tags: Optional[List[str]] = None
+
+    @field_validator("name")
+    @classmethod
+    def name_not_empty(cls, v: Optional[str]) -> Optional[str]:
+        if v is not None and not v.strip():
+            raise ValueError("name must not be empty")
+        return v.strip() if v is not None else v
 
 
 def create_db_engine(url: str = DATABASE_URL, *, echo: bool = False):
