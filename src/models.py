@@ -67,6 +67,11 @@ class RecipeUpdate(BaseModel):
         return v.strip() if v is not None else v
 
 
+class ReviewCreate(BaseModel):
+    rating: int
+    text: Optional[str] = None
+
+
 def create_db_engine(url: str = DATABASE_URL, *, echo: bool = False):
     connect_args = {}
     if url.startswith("sqlite"):

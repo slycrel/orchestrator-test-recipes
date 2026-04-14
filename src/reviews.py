@@ -5,7 +5,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request
 from fastapi.responses import RedirectResponse
 from sqlalchemy.orm import Session
 
-from models import Recipe, Review, get_db
+from models import Recipe, Review, ReviewCreate, get_db
 
 router = APIRouter()
 
@@ -36,14 +36,13 @@ def api_list_reviews(recipe_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/api/recipes/{recipe_id}/reviews", status_code=201)
-def api_create_review(recipe_id: int, payload: dict, db: Session = Depends(get_db)):
+def api_create_review(recipe_id: int, payload: ReviewCreate, db: Session = Depends(get_db)):
     recipe = db.query(Recipe).filter(Recipe.id == recipe_id).first()
     if not recipe:
         raise HTTPException(status_code=404, detail="Recipe not found")
-    rating = payload.get("rating")
-    if not isinstance(rating, int) or not (1 <= rating <= 5):
+    if not (1 <= payload.rating <= 5):
         raise HTTPException(status_code=422, detail="Rating must be 1-5")
-    review = Review(recipe_id=recipe_id, rating=rating, text=payload.get("text", ""))
+    review = Review(recipe_id=recipe_id, rating=payload.rating, text=payload.text or "")
     db.add(review)
     db.commit()
     db.refresh(review)
